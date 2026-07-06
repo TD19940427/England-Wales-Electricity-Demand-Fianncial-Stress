@@ -6,6 +6,7 @@ from datetime import datetime
 import os
 from openai import OpenAI
 import json
+import re
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -175,11 +176,89 @@ def get_comprehensive_stats(data):
     return stats
 
 # ============================================================
+# QUERY PARSER FUNCTIONS
+# ============================================================
+def parse_year_query(question):
+    """Extract year from question"""
+    years = re.findall(r'\b(20\d{2})\b', question)
+    return int(years[0]) if years else None
+
+def parse_quarter_query(question):
+    """Extract quarter from question"""
+    quarters = re.findall(r'\bQ([1-4])\b|\b([1-4])(?:st|nd|rd|th)\s+quarter\b', question, re.IGNORECASE)
+    if quarters:
+        return int(quarters[0][0] or quarters[0][1])
+    return None
+
+def parse_hour_query(question):
+    """Extract hour from question"""
+    hour_patterns = [
+        r'\b(\d{1,2}):(00|30)\b',
+        r'\b(\d{1,2})h\b',
+        r'\b(\d{1,2})\s*(am|pm)\b',
+        r'hour\s+(\d{1,2})\b',
+    ]
+    for pattern in hour_patterns:
+        matches = re.findall(pattern, question, re.IGNORECASE)
+        if matches:
+            hour = int(matches[0][0] if isinstance(matches[0], tuple) else matches[0])
+            if len(matches[0]) > 1 and matches[0][1].lower() == 'pm' and hour < 12:
+                hour += 12
+            return hour
+    return None
+
+def query_specific_data(data, year=None, quarter=None, hour=None):
+    """Query data for specific year/quarter/hour"""
+    results = {}
+    
+    if year:
+        quarterly = data['quarterly']
+        year_data = quarterly[quarterly['Year'] == year]
+        if len(year_data) > 0:
+            results['year'] = {
+                'year': year,
+                'avg_demand': year_data['Demand_MW'].mean(),
+                'min_demand': year_data['Demand_MW'].min(),
+                'max_demand': year_data['Demand_MW'].max(),
+                'quarters_count': len(year_data),
+                'is_historical': year <= 2025,
+                'is_forecast': year > 2025
+            }
+    
+    if year and quarter:
+        quarterly = data['quarterly']
+        quarter_data = quarterly[(quarterly['Year'] == year) & (quarterly['Quarter'] == quarter)]
+        if len(quarter_data) > 0:
+            results['quarter'] = {
+                'year': year,
+                'quarter': quarter,
+                'demand': quarter_data['Demand_MW'].iloc[0],
+                'is_historical': year <= 2025,
+                'is_forecast': year > 2025,
+                'date': str(quarter_data['Quarter_End_Date'].iloc[0])
+            }
+    
+    if hour is not None:
+        hourly_pattern = data['hourly_pattern']
+        hour_data = hourly_pattern[hourly_pattern['Hour'] == hour]
+        if len(hour_data) > 0:
+            results['hour'] = {
+                'hour': hour,
+                'avg_demand': hour_data['Avg_Demand_MW'].iloc[0],
+                'std_demand': hour_data['Std_Demand_MW'].iloc[0],
+                'min_demand': hour_data['Min_Demand_MW'].iloc[0],
+                'max_demand': hour_data['Max_Demand_MW'].iloc[0]
+            }
+    
+    return results
+
+# ============================================================
 # VISUALIZATION FUNCTIONS
 # ============================================================
 def create_demand_forecast_chart(data):
-    """Demand historical vs forecast"""
-    df = data['quarterly']
+    """Fixed: Demand historical vs forecast"""
+    df = data['quarterly'].copy()
+    df = df.sort_values('Quarter_End_Date')
     
     fig = go.Figure()
     
@@ -188,29 +267,32 @@ def create_demand_forecast_chart(data):
     
     fig.add_trace(go.Scatter(
         x=historical['Quarter_End_Date'],
-        y=historical['Demand_MW'],
+        y=historical['Historical_Demand_MW'],
         mode='lines+markers',
         name='Historical (2015-2025)',
         line=dict(color='#1f77b4', width=2),
-        marker=dict(size=6)
+        marker=dict(size=6),
+        hovertemplate='<b>%{x|%Y-%m-%d}</b><br>Demand: %{y:.2f} MW<extra></extra>'
     ))
     
     fig.add_trace(go.Scatter(
         x=forecast['Quarter_End_Date'],
-        y=forecast['Demand_MW'],
+        y=forecast['Forecast_Demand_MW'],
         mode='lines+markers',
         name='Forecast (2026-2035)',
         line=dict(color='#ff7f0e', width=2, dash='dash'),
-        marker=dict(size=6)
+        marker=dict(size=6),
+        hovertemplate='<b>%{x|%Y-%m-%d}</b><br>Forecast: %{y:.2f} MW<extra></extra>'
     ))
     
     fig.update_layout(
-        title='Electricity Demand: Historical vs Forecast',
-        xaxis_title='Time',
+        title='Quarterly Electricity Demand: Historical vs Forecast',
+        xaxis_title='Quarter',
         yaxis_title='Demand (MW)',
         hovermode='x unified',
         template='plotly_white',
-        height=500
+        height=500,
+        showlegend=True
     )
     
     return fig
@@ -365,7 +447,7 @@ def create_tariff_arrears_chart(data):
 # COMPREHENSIVE CHATBOT
 # ============================================================
 def get_comprehensive_response(user_question, data, conversation_history, use_ai=False):
-    """Comprehensive chatbot covering all topics"""
+    """Enhanced chatbot with specific query support"""
     
     question_lower = user_question.lower()
     stats = get_comprehensive_stats(data)
@@ -374,6 +456,53 @@ def get_comprehensive_response(user_question, data, conversation_history, use_ai
     if use_ai and os.getenv('OPENAI_API_KEY'):
         return get_ai_response(user_question, data, stats, conversation_history)
     
+    # === PARSE SPECIFIC QUERIES ===
+    year = parse_year_query(user_question)
+    quarter = parse_quarter_query(user_question)
+    hour = parse_hour_query(user_question)
+    
+    # Query specific data if parameters found
+    if year or hour:
+        specific_data = query_specific_data(data, year=year, quarter=quarter, hour=hour)
+        
+        # YEAR-SPECIFIC QUERY
+        if 'year' in specific_data and ('demand' in question_lower or year):
+            yr = specific_data['year']
+            period_type = "Historical" if yr['is_historical'] else "Forecast"
+            return f"""📊 **Electricity Demand in {yr['year']} ({period_type}):**
+
+• Average Demand: **{yr['avg_demand']:.2f} MW**
+• Minimum: {yr['min_demand']:.2f} MW
+• Maximum: {yr['max_demand']:.2f} MW
+• Data Points: {yr['quarters_count']} quarters
+
+{'This is actual historical data from operational records.' if yr['is_historical'] else 'This is forecast data from Prophet predictive model.'}"""
+        
+        # QUARTER-SPECIFIC QUERY
+        if 'quarter' in specific_data:
+            q = specific_data['quarter']
+            period_type = "Historical" if q['is_historical'] else "Forecast"
+            return f"""📅 **Q{q['quarter']} {q['year']} Electricity Demand ({period_type}):**
+
+• Demand: **{q['demand']:.2f} MW**
+• Quarter End Date: {q['date']}
+• Period Type: {period_type}
+
+{'Based on actual operational data.' if q['is_historical'] else 'Based on Prophet forecast model.'}"""
+        
+        # HOUR-SPECIFIC QUERY
+        if 'hour' in specific_data and ('hour' in question_lower or ':' in user_question or 'am' in question_lower or 'pm' in question_lower):
+            h = specific_data['hour']
+            return f"""🕐 **Average Demand at {h['hour']:02d}:00 (Across All Historical Days):**
+
+• Average Demand: **{h['avg_demand']:.2f} MW**
+• Standard Deviation: ±{h['std_demand']:.2f} MW
+• Minimum Recorded: {h['min_demand']:.2f} MW
+• Maximum Recorded: {h['max_demand']:.2f} MW
+
+This represents the typical demand at {h['hour']:02d}:00 across the entire historical period (2015-2025)."""
+    
+    # === EXISTING GENERIC RESPONSES ===
     # Rule-based responses for all topics
     
     # === DEMAND QUESTIONS ===
@@ -477,28 +606,32 @@ The Financial Stress Index combines demand, tariffs, and arrears to identify per
     # === DEFAULT COMPREHENSIVE RESPONSE ===
     return f"""I can help you with comprehensive electricity analytics across multiple dimensions:
 
-**📊 Topics I Cover:**
+**📊 Specific Queries (NEW!):**
+✅ "What is demand in 2024?" (any year 2015-2035)
+✅ "What is demand in Q1 2024?" (specific quarter)
+✅ "What is avg demand at 18:00?" (any hour 0-23)
+✅ "Compare 2024 vs 2025"
+
+**📚 General Topics:**
 ✅ Demand (historical 2015-2025 & forecast 2026-2035)
 ✅ Seasonal patterns (Winter, Spring, Summer, Autumn)
 ✅ Weekday vs Weekend patterns
 ✅ Weather impact (Temperature, Rainfall)
 ✅ Financial metrics (Tariffs, Arrears, Debt)
 ✅ Financial Stress Index
-✅ Hourly & daily patterns
 
 **🎯 Quick Stats:**
 - Historical Avg Demand: {stats['demand']['historical_avg']:.0f} MW
 - Forecast Avg Demand: {stats['demand']['forecast_avg']:.0f} MW
 - Peak Season: {stats['seasonal']['peak_season']}
 - Avg Tariff: £{stats['financial']['avg_tariff']:.4f}/kWh
-- Total Arrears: £{stats['financial']['total_arrears']:.1f}B
 
 **💬 Try asking:**
+- "What is demand in 2024?"
+- "What is avg demand at 18:00?"
 - "What are the seasonal patterns?"
-- "Compare weekday vs weekend demand"
-- "How does temperature affect demand?"
+- "Compare weekday vs weekend"
 - "What's the financial stress index?"
-- "Show me tariff trends"
 """
 
 def get_ai_response(user_question, data, stats, conversation_history):
