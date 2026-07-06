@@ -1,0 +1,71 @@
+File,Column,Type,Description
+01_Hourly_Demand.csv,DateTime,DateTime,Timestamp of measurement (hourly)
+01_Hourly_Demand.csv,Demand_MW,Float,National Demand in Megawatts
+01_Hourly_Demand.csv,Wind_Generation_MW,Float,Embedded wind generation in MW
+01_Hourly_Demand.csv,Solar_Generation_MW,Float,Embedded solar generation in MW
+01_Hourly_Demand.csv,Price_per_kWh,Float,Electricity price per kilowatt-hour (£/kWh)
+01_Hourly_Demand.csv,Temperature_C,Float,Mean temperature in Celsius
+01_Hourly_Demand.csv,Rainfall_mm,Float,Rainfall in millimeters
+01_Hourly_Demand.csv,Year,Integer,Year (2015-2025)
+01_Hourly_Demand.csv,Month,Integer,Month (1-12)
+01_Hourly_Demand.csv,Day,Integer,Day of month (1-31)
+01_Hourly_Demand.csv,Hour,Integer,Hour of day (0-23)
+01_Hourly_Demand.csv,DayOfWeek,Integer,"Day of week (0=Monday, 6=Sunday)"
+01_Hourly_Demand.csv,IsWeekend,Binary,"Weekend flag (0=Weekday, 1=Weekend)"
+02_Daily_Demand.csv,Date,Date,Date of measurement
+02_Daily_Demand.csv,Demand_Avg_MW,Float,Average daily demand in MW
+02_Daily_Demand.csv,Demand_Min_MW,Float,Minimum hourly demand during the day
+02_Daily_Demand.csv,Demand_Max_MW,Float,Maximum hourly demand during the day
+02_Daily_Demand.csv,Demand_Std_MW,Float,Standard deviation of hourly demand
+03_Weekly_Demand.csv,Week_End_Date,Date,End date of week
+03_Weekly_Demand.csv,Demand_Avg_MW,Float,Average weekly demand in MW
+04_Monthly_Demand.csv,Month,Date,Month-end date
+04_Monthly_Demand.csv,Demand_Avg_MW,Float,Average monthly demand in MW
+04_Monthly_Demand.csv,Temperature_C,Float,Average monthly temperature
+04_Monthly_Demand.csv,Rainfall_mm,Float,Total monthly rainfall
+04_Monthly_Demand.csv,Sunshine_hours,Float,Total monthly sunshine hours
+05_Quarterly_Forecast_Prophet.csv,Quarter_End_Date,Date,"Quarter end date (e.g., 2015-03-31)"
+05_Quarterly_Forecast_Prophet.csv,Historical_Demand_MW,Float,Historical quarterly demand (2015-2025)
+05_Quarterly_Forecast_Prophet.csv,Forecast_Demand_MW,Float,Prophet forecast quarterly demand (2026-2035)
+05_Quarterly_Forecast_Prophet.csv,Is_Historical,Binary,"Historical data flag (1=Historical, 0=Forecast)"
+05_Quarterly_Forecast_Prophet.csv,Is_Forecast,Binary,"Forecast data flag (1=Forecast, 0=Historical)"
+07_Model_Comparison.csv,Model,String,"Model name (SARIMA, Prophet, XGBoost)"
+07_Model_Comparison.csv,RMSE,Float,Root Mean Squared Error
+07_Model_Comparison.csv,MAE,Float,Mean Absolute Error
+07_Model_Comparison.csv,Forecast_Type,String,Type of forecasting approach
+10_Quarterly_Tariff_EnglandWales.csv,Quarter_End_Date,Date,Quarter end date
+10_Quarterly_Tariff_EnglandWales.csv,Quarterly_Price_per_kWh,Float,Average quarterly electricity price (£/kWh)
+10_Quarterly_Tariff_EnglandWales.csv,Year,Integer,Year
+10_Quarterly_Tariff_EnglandWales.csv,Quarter,Integer,Quarter (1-4)
+11_Quarterly_Arrears_Debt.csv,Quarter_End_Date,Date,Quarter end date (Q1 2018 - Q4 2025)
+11_Quarterly_Arrears_Debt.csv,Original_Category,String,"Original category label (e.g., 'Q1 2018')"
+11_Quarterly_Arrears_Debt.csv,Arrears_Billions_GBP,Float,Total debt and arrears in billions of GBP
+12_Financial_Stress_Index.csv,Quarter_End_Date,Date,Quarter end date
+12_Financial_Stress_Index.csv,Demand_MW,Float,Quarterly electricity demand in MW
+12_Financial_Stress_Index.csv,Quarterly_Price_per_kWh,Float,Quarterly electricity price (£/kWh)
+12_Financial_Stress_Index.csv,Arrears_Billions_GBP,Float,Consumer arrears in billions (£)
+12_Financial_Stress_Index.csv,Financial_Stress_Index,Float,FSI = (Demand × Price) + Arrears
+12_Financial_Stress_Index.csv,Is_Crisis_Period,Binary,"Crisis period flag (1=2022-2025, 0=other)"
+13_Regional_Tariff_Data.csv,Year,Integer,Year
+13_Regional_Tariff_Data.csv,Region,String,England & Wales region name
+13_Regional_Tariff_Data.csv,Variable_Price_per_kWh,Float,Variable electricity price (£/kWh)
+13_Regional_Tariff_Data.csv,Fixed_Price_per_Year,Float,Fixed annual cost (£/year)
+14a_Temperature_Bins.csv,Temperature_Bin,String,"Temperature range (e.g., '10-15°C')"
+14a_Temperature_Bins.csv,Avg_Demand_MW,Float,Average demand for this temperature bin
+14a_Temperature_Bins.csv,Count,Integer,Number of observations in this bin
+14b_Rainfall_Bins.csv,Rainfall_Bin,String,"Rainfall range (e.g., 'Light (1-5mm)')"
+14b_Rainfall_Bins.csv,Avg_Demand_MW,Float,Average demand for this rainfall bin
+15a_Hourly_Pattern.csv,Hour,Integer,Hour of day (0-23)
+15a_Hourly_Pattern.csv,Avg_Demand_MW,Float,Average demand for this hour across all days
+15a_Hourly_Pattern.csv,Min_Demand_MW,Float,Minimum demand observed at this hour
+15a_Hourly_Pattern.csv,Max_Demand_MW,Float,Maximum demand observed at this hour
+15b_Weekday_Pattern.csv,Weekday,Integer,"Day of week (0=Monday, 6=Sunday)"
+15b_Weekday_Pattern.csv,Day_Name,String,"Day name (Monday, Tuesday, etc.)"
+15b_Weekday_Pattern.csv,Avg_Demand_MW,Float,Average demand for this day of week
+15c_Weekend_Comparison.csv,Is_Weekend,Binary,"Weekend flag (0=Weekday, 1=Weekend)"
+15c_Weekend_Comparison.csv,Type,String,'Weekday' or 'Weekend'
+15c_Weekend_Comparison.csv,Avg_Demand_MW,Float,Average demand for weekdays vs weekends
+15d_Seasonal_Pattern.csv,Season,String,"Season (Winter, Spring, Summer, Autumn)"
+15d_Seasonal_Pattern.csv,Avg_Demand_MW,Float,Average seasonal demand
+15d_Seasonal_Pattern.csv,Min_Demand_MW,Float,Minimum demand in this season
+15d_Seasonal_Pattern.csv,Max_Demand_MW,Float,Maximum demand in this season
