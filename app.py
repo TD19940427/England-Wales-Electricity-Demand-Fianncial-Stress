@@ -98,6 +98,9 @@ def load_all_data():
         data['financial_stress'] = pd.read_csv('data/12_Financial_Stress_Index.csv')
         data['financial_stress']['Quarter_End_Date'] = pd.to_datetime(data['financial_stress']['Quarter_End_Date'])
         
+        # Create FSI detail view (alias for compatibility)
+        data['fsi_detail'] = data['financial_stress'].copy()
+        
         # Data dictionary
         data['dictionary'] = pd.read_csv('data/00_DATA_DICTIONARY.csv')
         
@@ -737,215 +740,8 @@ def get_ai_response(user_question, data, stats, conversation_history):
         return f"⚠️ Error: {str(e)}"
 
 # ============================================================
-# MAIN APP
+# FSI SCENARIO TOOL PAGE
 # ============================================================
-def main():
-    # Header
-    st.markdown('<div class="main-header">⚡ Comprehensive Electricity Analytics Chatbot</div>', unsafe_allow_html=True)
-    
-    # Load data
-    data = load_all_data()
-    
-    if data is None:
-        st.stop()
-    
-    # Get comprehensive stats once (avoid repeated calculations in loops)
-    stats = get_comprehensive_stats(data)
-    
-    # Sidebar
-    with st.sidebar:
-        st.header("📊 Analytics Dashboard")
-        
-        # Page selector
-        page_mode = st.radio(
-            "📌 Select Mode",
-            ["Analytics Dashboard", "FSI Scenario Tool"],
-            horizontal=True
-        )
-        
-        st.divider()
-        
-        # Topic selector (only for Analytics Dashboard)
-        if page_mode == "Analytics Dashboard":
-            topic = st.selectbox(
-                "📌 Select Topic",
-                ["Overview", "Demand & Forecast", "Seasonal & Temporal", "Weather Impact", "Financial Metrics"]
-            )
-        else:
-            topic = None
-        
-        st.divider()
-        
-        # Show relevant metrics based on topic
-        if topic == "Overview" or topic == "Demand & Forecast":
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric(
-                    "Historical Avg",
-                    f"{stats['demand']['historical_avg']:.0f} MW",
-                    help="2015-2025"
-                )
-            with col2:
-                st.metric(
-                    "Forecast Avg",
-                    f"{stats['demand']['forecast_avg']:.0f} MW",
-                    delta=f"{stats['demand']['trend_change']:.1f}%",
-                    help="2026-2035"
-                )
-        
-        if topic == "Overview" or topic == "Seasonal & Temporal":
-            st.metric(
-                "Peak Season",
-                stats['seasonal']['peak_season'],
-                help="Highest demand season"
-            )
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Weekday", f"{stats['weekend']['weekday_avg']:.0f} MW")
-            with col2:
-                st.metric("Weekend", f"{stats['weekend']['weekend_avg']:.0f} MW")
-        
-        if topic == "Overview" or topic == "Financial Metrics":
-            st.metric(
-                "Avg Tariff",
-                f"£{stats['financial']['avg_tariff']:.4f}/kWh"
-            )
-            st.metric(
-                "Total Arrears",
-                f"£{stats['financial']['total_arrears']:.1f}B"
-            )
-            st.metric(
-                "Financial Stress",
-                f"{stats['financial']['avg_fsi']:.2f}",
-                delta=f"{stats['financial']['crisis_quarters']} crisis periods"
-            )
-        
-        st.divider()
-        
-        # Visualization options
-        st.subheader("📈 Visualizations")
-        
-        viz_options = {
-            "Demand & Forecast": ["Demand Forecast", "Yearly Trend"],
-            "Seasonal & Temporal": ["Seasonal Patterns", "Weekday Patterns", "Hourly Pattern"],
-            "Weather Impact": ["Temperature Impact"],
-            "Financial Metrics": ["Tariff vs Arrears", "Financial Stress Index"]
-        }
-        
-        if topic in viz_options:
-            viz_type = st.selectbox("Select Chart", viz_options[topic])
-        else:
-            viz_type = st.selectbox("Select Chart", ["Demand Forecast", "Seasonal Patterns", "Financial Stress Index"])
-        
-        if st.button("Generate Chart", use_container_width=True):
-            st.session_state['show_viz'] = True
-            st.session_state['viz_type'] = viz_type
-        
-        st.divider()
-        
-        # Data info
-        st.subheader("ℹ️ Data Coverage")
-        st.info(f"""**Time Period:**
-        - Historical: 2015-2025
-        - Forecast: 2026-2035
-        
-        **Data Points:**
-        - {len(data['hourly']):,} hourly records
-        - {len(data['daily']):,} daily records
-        - {len(data['quarterly'])} quarters
-        
-        **Dimensions:**
-        Demand, Seasonal, Weather, Financial""")
-        
-        # AI toggle
-        st.divider()
-        st.subheader("🔑 AI Mode")
-        use_ai = st.checkbox("Use AI Chatbot", value=False)
-        
-        if use_ai:
-            api_key_input = st.text_input(
-                "OpenAI API Key",
-                type="password",
-                help="For advanced AI responses"
-            )
-            if api_key_input:
-                os.environ['OPENAI_API_KEY'] = api_key_input
-    
-    # Main content
-    col1_width, col2_width = 2, 1
-    
-    # Use pre-computed stats instead of creating new columns repeatedly
-    cols = st.columns([col1_width, col2_width])
-    
-    with cols[0]:
-            st.subheader("💬 Ask Me Anything")
-        
-        # Initialize chat history
-        if 'messages' not in st.session_state:
-            st.session_state['messages'] = [
-                {
-                    "role": "assistant",
-                    "content": "Hello! 👋 I'm your comprehensive electricity analytics assistant. I can answer questions about:\n\n📊 Demand (historical & forecast)\n❄️ Seasonal patterns\n📅 Weekday/weekend trends\n🌡️ Weather impact\n💷 Financial metrics (tariffs, arrears, debt)\n\nWhat would you like to know?"
-                }
-            ]
-        
-        if 'conversation_history' not in st.session_state:
-            st.session_state['conversation_history'] = []
-        
-        # Display messages
-        for message in st.session_state['messages']:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-        
-        # Chat input
-        if prompt := st.chat_input("Ask about demand, seasonal patterns, weather, finances..."):
-            st.session_state['messages'].append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            
-            with st.chat_message("assistant"):
-                with st.spinner("Analyzing..."):
-                    response = get_comprehensive_response(
-                        prompt, data, 
-                        st.session_state['conversation_history'],
-                        use_ai
-                    )
-                    
-                    if use_ai:
-                        st.session_state['conversation_history'].append({"role": "user", "content": prompt})
-                        st.session_state['conversation_history'].append({"role": "assistant", "content": response})
-                    
-                    st.markdown(response)
-            
-            st.session_state['messages'].append({"role": "assistant", "content": response})
-    
-    with cols[1]:
-        st.subheader("📈 Visualizations")
-        
-        if st.session_state.get('show_viz', False):
-            viz_type = st.session_state.get('viz_type', 'Demand Forecast')
-            
-            if viz_type == "Demand Forecast":
-                fig = create_demand_forecast_chart(data)
-            elif viz_type == "Seasonal Patterns":
-                fig = create_seasonal_chart(data)
-            elif viz_type == "Weekday Patterns":
-                fig = create_weekday_chart(data)
-            elif viz_type == "Hourly Pattern":
-                fig = create_hourly_pattern_chart(data)
-            elif viz_type == "Temperature Impact":
-                fig = create_weather_impact_chart(data)
-            elif viz_type == "Tariff vs Arrears":
-                fig = create_tariff_arrears_chart(data)
-            elif viz_type == "Financial Stress Index":
-                fig = create_financial_stress_chart(data)
-            else:
-                fig = create_demand_forecast_chart(data)
-            
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("👈 Select a topic and chart type, then click 'Generate Chart'")
-
 def show_fsi_scenario_page(data):
     """FSI Scenario Analysis Page"""
     
@@ -1148,7 +944,7 @@ def show_fsi_scenario_page(data):
     st.subheader("💡 Interpretation")
     
     if result['impact'] > 0:
-        impact_text = "🗔 **Increased financial stress**"
+        impact_text = "🔴 **Increased financial stress**"
         explanation = f"""The scenario results in a **{abs(result['impact_pct']):.1f}% increase** in the Financial Stress Index, 
         adding £{abs(result['impact']):.2f} billion in financial burden. This suggests:
         - Higher consumer electricity costs
@@ -1162,7 +958,7 @@ def show_fsi_scenario_page(data):
         - Improved affordability
         - Reduced risk of arrears and debt"""
     else:
-        impact_text = "➪ **No change**"
+        impact_text = "➖ **No change**"
         explanation = "The scenario parameters result in no net change to the Financial Stress Index."
     
     st.markdown(impact_text)
@@ -1192,6 +988,222 @@ def show_fsi_scenario_page(data):
         - Prices: BEIS/DESNZ Quarterly Energy Prices
         - Arrears: Ofgem financial vulnerability data
         """)
+
+# ============================================================
+# MAIN APP
+# ============================================================
+def main():
+    # Header
+    st.markdown('<div class="main-header">⚡ Comprehensive Electricity Analytics Chatbot</div>', unsafe_allow_html=True)
+    
+    # Load data
+    data = load_all_data()
+    
+    if data is None:
+        st.stop()
+    
+    # Get comprehensive stats once (avoid repeated calculations in loops)
+    stats = get_comprehensive_stats(data)
+    
+    # Sidebar
+    with st.sidebar:
+        st.header("📊 Analytics Dashboard")
+        
+        # Page selector
+        page_mode = st.radio(
+            "📌 Select Mode",
+            ["Analytics Dashboard", "FSI Scenario Tool"],
+            horizontal=True
+        )
+        
+        st.divider()
+        
+        # Topic selector (only for Analytics Dashboard)
+        if page_mode == "Analytics Dashboard":
+            topic = st.selectbox(
+                "📌 Select Topic",
+                ["Overview", "Demand & Forecast", "Seasonal & Temporal", "Weather Impact", "Financial Metrics"]
+            )
+        else:
+            topic = None
+        
+        st.divider()
+        
+        # Show relevant metrics based on topic
+        if topic == "Overview" or topic == "Demand & Forecast":
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(
+                    "Historical Avg",
+                    f"{stats['demand']['historical_avg']:.0f} MW",
+                    help="2015-2025"
+                )
+            with col2:
+                st.metric(
+                    "Forecast Avg",
+                    f"{stats['demand']['forecast_avg']:.0f} MW",
+                    delta=f"{stats['demand']['trend_change']:.1f}%",
+                    help="2026-2035"
+                )
+        
+        if topic == "Overview" or topic == "Seasonal & Temporal":
+            st.metric(
+                "Peak Season",
+                stats['seasonal']['peak_season'],
+                help="Highest demand season"
+            )
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Weekday", f"{stats['weekend']['weekday_avg']:.0f} MW")
+            with col2:
+                st.metric("Weekend", f"{stats['weekend']['weekend_avg']:.0f} MW")
+        
+        if topic == "Overview" or topic == "Financial Metrics":
+            st.metric(
+                "Avg Tariff",
+                f"£{stats['financial']['avg_tariff']:.4f}/kWh"
+            )
+            st.metric(
+                "Total Arrears",
+                f"£{stats['financial']['total_arrears']:.1f}B"
+            )
+            st.metric(
+                "Financial Stress",
+                f"{stats['financial']['avg_fsi']:.2f}",
+                delta=f"{stats['financial']['crisis_quarters']} crisis periods"
+            )
+        
+        st.divider()
+        
+        # Visualization options (only for Analytics Dashboard)
+        if page_mode == "Analytics Dashboard":
+            st.subheader("📈 Visualizations")
+            
+            viz_options = {
+                "Demand & Forecast": ["Demand Forecast", "Yearly Trend"],
+                "Seasonal & Temporal": ["Seasonal Patterns", "Weekday Patterns", "Hourly Pattern"],
+                "Weather Impact": ["Temperature Impact"],
+                "Financial Metrics": ["Tariff vs Arrears", "Financial Stress Index"]
+            }
+            
+            if topic in viz_options:
+                viz_type = st.selectbox("Select Chart", viz_options[topic])
+            else:
+                viz_type = st.selectbox("Select Chart", ["Demand Forecast", "Seasonal Patterns", "Financial Stress Index"])
+            
+            if st.button("Generate Chart", use_container_width=True):
+                st.session_state['show_viz'] = True
+                st.session_state['viz_type'] = viz_type
+            
+            st.divider()
+        
+        # Data info
+        st.subheader("ℹ️ Data Coverage")
+        st.info(f"""**Time Period:**
+        - Historical: 2015-2025
+        - Forecast: 2026-2035
+        
+        **Data Points:**
+        - {len(data['hourly']):,} hourly records
+        - {len(data['daily']):,} daily records
+        - {len(data['quarterly'])} quarters
+        
+        **Dimensions:**
+        Demand, Seasonal, Weather, Financial""")
+        
+        # AI toggle (only for Analytics Dashboard)
+        if page_mode == "Analytics Dashboard":
+            st.divider()
+            st.subheader("🔑 AI Mode")
+            use_ai = st.checkbox("Use AI Chatbot", value=False)
+            
+            if use_ai:
+                api_key_input = st.text_input(
+                    "OpenAI API Key",
+                    type="password",
+                    help="For advanced AI responses"
+                )
+                if api_key_input:
+                    os.environ['OPENAI_API_KEY'] = api_key_input
+        else:
+            use_ai = False
+    
+    # Route to appropriate page
+    if page_mode == "FSI Scenario Tool":
+        show_fsi_scenario_page(data)
+    else:
+        # Analytics Dashboard (main chatbot)
+        col1_width, col2_width = 2, 1
+        cols = st.columns([col1_width, col2_width])
+        
+        with cols[0]:
+            st.subheader("💬 Ask Me Anything")
+            
+            # Initialize chat history
+            if 'messages' not in st.session_state:
+                st.session_state['messages'] = [
+                    {
+                        "role": "assistant",
+                        "content": "Hello! 👋 I'm your comprehensive electricity analytics assistant. I can answer questions about:\n\n📊 Demand (historical & forecast)\n❄️ Seasonal patterns\n📅 Weekday/weekend trends\n🌡️ Weather impact\n💷 Financial metrics (tariffs, arrears, debt)\n\nWhat would you like to know?"
+                    }
+                ]
+            
+            if 'conversation_history' not in st.session_state:
+                st.session_state['conversation_history'] = []
+            
+            # Display messages
+            for message in st.session_state['messages']:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+            
+            # Chat input
+            if prompt := st.chat_input("Ask about demand, seasonal patterns, weather, finances..."):
+                st.session_state['messages'].append({"role": "user", "content": prompt})
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+                
+                with st.chat_message("assistant"):
+                    with st.spinner("Analyzing..."):
+                        response = get_comprehensive_response(
+                            prompt, data, 
+                            st.session_state['conversation_history'],
+                            use_ai
+                        )
+                        
+                        if use_ai:
+                            st.session_state['conversation_history'].append({"role": "user", "content": prompt})
+                            st.session_state['conversation_history'].append({"role": "assistant", "content": response})
+                        
+                        st.markdown(response)
+                
+                st.session_state['messages'].append({"role": "assistant", "content": response})
+        
+        with cols[1]:
+            st.subheader("📈 Visualizations")
+            
+            if st.session_state.get('show_viz', False):
+                viz_type = st.session_state.get('viz_type', 'Demand Forecast')
+                
+                if viz_type == "Demand Forecast":
+                    fig = create_demand_forecast_chart(data)
+                elif viz_type == "Seasonal Patterns":
+                    fig = create_seasonal_chart(data)
+                elif viz_type == "Weekday Patterns":
+                    fig = create_weekday_chart(data)
+                elif viz_type == "Hourly Pattern":
+                    fig = create_hourly_pattern_chart(data)
+                elif viz_type == "Temperature Impact":
+                    fig = create_weather_impact_chart(data)
+                elif viz_type == "Tariff vs Arrears":
+                    fig = create_tariff_arrears_chart(data)
+                elif viz_type == "Financial Stress Index":
+                    fig = create_financial_stress_chart(data)
+                else:
+                    fig = create_demand_forecast_chart(data)
+                
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("👈 Select a topic and chart type, then click 'Generate Chart'")
 
 if __name__ == "__main__":
     main()
