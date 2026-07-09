@@ -98,8 +98,24 @@ def load_all_data():
         data['financial_stress'] = pd.read_csv('data/12_Financial_Stress_Index.csv')
         data['financial_stress']['Quarter_End_Date'] = pd.to_datetime(data['financial_stress']['Quarter_End_Date'])
         
-        # Create FSI detail view (alias for compatibility)
-        data['fsi_detail'] = data['financial_stress'].copy()
+        # Create FSI detail view by merging components
+        # Merge quarterly demand with tariff and arrears
+        fsi_detail = data['quarterly'][['Quarter_End_Date', 'Year', 'Quarter', 'Demand_MW']].copy()
+        
+        # Merge with tariff data
+        tariff_cols = data['tariff'][['Quarter_End_Date', 'Quarterly_Price_per_kWh']].copy()
+        tariff_cols.rename(columns={'Quarterly_Price_per_kWh': 'Price_per_kWh'}, inplace=True)
+        fsi_detail = fsi_detail.merge(tariff_cols, on='Quarter_End_Date', how='left')
+        
+        # Merge with arrears data
+        arrears_cols = data['arrears'][['Quarter_End_Date', 'Arrears_Billions_GBP']].copy()
+        fsi_detail = fsi_detail.merge(arrears_cols, on='Quarter_End_Date', how='left')
+        
+        # Merge with FSI values
+        fsi_cols = data['financial_stress'][['Quarter_End_Date', 'Financial_Stress_Index', 'Is_Crisis_Period']].copy()
+        fsi_detail = fsi_detail.merge(fsi_cols, on='Quarter_End_Date', how='left')
+        
+        data['fsi_detail'] = fsi_detail
         
         # Data dictionary
         data['dictionary'] = pd.read_csv('data/00_DATA_DICTIONARY.csv')
