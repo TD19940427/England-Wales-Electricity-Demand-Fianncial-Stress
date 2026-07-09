@@ -252,6 +252,55 @@ def query_specific_data(data, year=None, quarter=None, hour=None):
     
     return results
 
+def get_fsi_baseline(data, year, quarter):
+    """Get baseline FSI data for a specific quarter"""
+    fsi_data = data['fsi_detail']
+    baseline = fsi_data[(fsi_data['Year'] == year) & (fsi_data['Quarter'] == quarter)]
+    
+    if len(baseline) == 0:
+        return None
+    
+    row = baseline.iloc[0]
+    return {
+        'year': year,
+        'quarter': quarter,
+        'demand_mw': row['Demand_MW'],
+        'price_kwh': row['Price_per_kWh'],
+        'arrears_bn': row['Arrears_Billions_GBP'],
+        'fsi': row['Financial_Stress_Index'],
+        'date': row['Quarter_End_Date']
+    }
+
+def simulate_fsi(baseline, price_change_pct=0, demand_change_pct=0, arrears_change_bn=0):
+    """Simulate FSI with variable changes"""
+    
+    # Apply changes
+    new_demand = baseline['demand_mw'] * (1 + demand_change_pct / 100)
+    new_price = baseline['price_kwh'] * (1 + price_change_pct / 100)
+    new_arrears = baseline['arrears_bn'] + arrears_change_bn
+    
+    # Calculate new FSI
+    # FSI = (Demand × Price) + Arrears
+    baseline_fsi = baseline['fsi']
+    new_fsi = (new_demand * new_price) + new_arrears
+    
+    # Calculate impacts
+    impact = new_fsi - baseline_fsi
+    impact_pct = (impact / baseline_fsi * 100) if baseline_fsi != 0 else 0
+    
+    return {
+        'baseline_demand': baseline['demand_mw'],
+        'new_demand': new_demand,
+        'baseline_price': baseline['price_kwh'],
+        'new_price': new_price,
+        'baseline_arrears': baseline['arrears_bn'],
+        'new_arrears': new_arrears,
+        'baseline_fsi': baseline_fsi,
+        'new_fsi': new_fsi,
+        'impact': impact,
+        'impact_pct': impact_pct
+    }
+
 # ============================================================
 # VISUALIZATION FUNCTIONS
 # ============================================================
@@ -707,11 +756,23 @@ def main():
     with st.sidebar:
         st.header("📊 Analytics Dashboard")
         
-        # Topic selector
-        topic = st.selectbox(
-            "📌 Select Topic",
-            ["Overview", "Demand & Forecast", "Seasonal & Temporal", "Weather Impact", "Financial Metrics"]
+        # Page selector
+        page_mode = st.radio(
+            "📌 Select Mode",
+            ["Analytics Dashboard", "FSI Scenario Tool"],
+            horizontal=True
         )
+        
+        st.divider()
+        
+        # Topic selector (only for Analytics Dashboard)
+        if page_mode == "Analytics Dashboard":
+            topic = st.selectbox(
+                "📌 Select Topic",
+                ["Overview", "Demand & Forecast", "Seasonal & Temporal", "Weather Impact", "Financial Metrics"]
+            )
+        else:
+            topic = None
         
         st.divider()
         
@@ -817,7 +878,7 @@ def main():
     cols = st.columns([col1_width, col2_width])
     
     with cols[0]:
-        st.subheader("💬 Ask Me Anything")
+            st.subheader("💬 Ask Me Anything")
         
         # Initialize chat history
         if 'messages' not in st.session_state:
@@ -884,6 +945,253 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("👈 Select a topic and chart type, then click 'Generate Chart'")
+
+def show_fsi_scenario_page(data):
+    """FSI Scenario Analysis Page"""
+    
+    st.title("📊 Financial Stress Index - Scenario Analysis")
+    st.markdown("""Simulate the impact of changes in electricity prices, demand, and consumer debt 
+    on the Financial Stress Index (FSI) for England & Wales.""")
+    
+    st.divider()
+    
+    # Get available years and quarters from FSI data
+    fsi_data = data['fsi_detail']
+    available_years = sorted(fsi_data['Year'].unique())
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📅 Select Period")
+        selected_year = st.selectbox("Year", available_years, index=len(available_years)//2)
+        selected_quarter = st.selectbox("Quarter", [1, 2, 3, 4])
+    
+    with col2:
+        st.subheader("⚙️ Adjust Variables")
+        price_change = st.slider(
+            "Price Change (%)",
+            min_value=-50,
+            max_value=50,
+            value=0,
+            step=5,
+            help="Adjust electricity price by percentage"
+        )
+        demand_change = st.slider(
+            "Demand Change (%)",
+            min_value=-20,
+            max_value=20,
+            value=0,
+            step=2,
+            help="Adjust electricity demand by percentage"
+        )
+        arrears_change = st.slider(
+            "Arrears Change (£bn)",
+            min_value=-2.0,
+            max_value=2.0,
+            value=0.0,
+            step=0.1,
+            help="Adjust consumer arrears/debt in billions of pounds"
+        )
+    
+    st.divider()
+    
+    # Get baseline data
+    baseline = get_fsi_baseline(data, selected_year, selected_quarter)
+    
+    if baseline is None:
+        st.error(f"❌ No FSI data available for Q{selected_quarter} {selected_year}")
+        st.info("Please select a different period with available data.")
+        return
+    
+    # Calculate scenario
+    result = simulate_fsi(baseline, price_change, demand_change, arrears_change)
+    
+    # Display results
+    st.subheader(f"📊 FSI Scenario Results: Q{selected_quarter} {selected_year}")
+    
+    # Metrics in 3 columns
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(
+            "Baseline FSI",
+            f"£{result['baseline_fsi']:,.2f}",
+            help="Current FSI value"
+        )
+    
+    with col2:
+        st.metric(
+            "New FSI",
+            f"£{result['new_fsi']:,.2f}",
+            delta=f"{result['impact_pct']:+.1f}%",
+            delta_color="inverse",
+            help="FSI after applying changes"
+        )
+    
+    with col3:
+        st.metric(
+            "Impact",
+            f"£{result['impact']:+,.2f}",
+            help="Change in FSI (billions)"
+        )
+    
+    st.divider()
+    
+    # Detailed breakdown
+    st.subheader("📄 Detailed Breakdown")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Baseline (Current)**")
+        breakdown_df_baseline = pd.DataFrame({
+            'Variable': ['Demand', 'Price', 'Arrears', '**FSI Total**'],
+            'Value': [
+                f"{result['baseline_demand']:,.0f} MW",
+                f"£{result['baseline_price']:.4f}/kWh",
+                f"£{result['baseline_arrears']:.2f}bn",
+                f"**£{result['baseline_fsi']:,.2f}**"
+            ]
+        })
+        st.dataframe(breakdown_df_baseline, hide_index=True, use_container_width=True)
+    
+    with col2:
+        st.markdown("**Scenario (After Changes)**")
+        breakdown_df_new = pd.DataFrame({
+            'Variable': ['Demand', 'Price', 'Arrears', '**FSI Total**'],
+            'Value': [
+                f"{result['new_demand']:,.0f} MW ({demand_change:+}%)",
+                f"£{result['new_price']:.4f}/kWh ({price_change:+}%)",
+                f"£{result['new_arrears']:.2f}bn ({arrears_change:+.1f}bn)",
+                f"**£{result['new_fsi']:,.2f}** ({result['impact_pct']:+.1f}%)"
+            ]
+        })
+        st.dataframe(breakdown_df_new, hide_index=True, use_container_width=True)
+    
+    st.divider()
+    
+    # Visualization - Before vs After
+    st.subheader("📈 Visual Comparison")
+    
+    fig = go.Figure()
+    
+    # Bar chart comparing baseline vs scenario
+    categories = ['Baseline FSI', 'Scenario FSI']
+    values = [result['baseline_fsi'], result['new_fsi']]
+    colors = ['steelblue', 'coral' if result['impact'] > 0 else 'lightgreen']
+    
+    fig.add_trace(go.Bar(
+        x=categories,
+        y=values,
+        marker=dict(color=colors),
+        text=[f"£{v:,.2f}" for v in values],
+        textposition='outside',
+        hovertemplate='<b>%{x}</b><br>FSI: £%{y:,.2f}<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        title=f'FSI Comparison: Q{selected_quarter} {selected_year}',
+        yaxis_title='Financial Stress Index (£)',
+        template='plotly_white',
+        height=400,
+        showlegend=False
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Component breakdown chart
+    st.subheader("📊 Component Breakdown")
+    
+    fig2 = go.Figure()
+    
+    components_baseline = [
+        ('Demand × Price', result['baseline_demand'] * result['baseline_price']),
+        ('Arrears', result['baseline_arrears'])
+    ]
+    
+    components_scenario = [
+        ('Demand × Price', result['new_demand'] * result['new_price']),
+        ('Arrears', result['new_arrears'])
+    ]
+    
+    fig2.add_trace(go.Bar(
+        name='Baseline',
+        x=[c[0] for c in components_baseline],
+        y=[c[1] for c in components_baseline],
+        marker_color='steelblue',
+        text=[f"£{c[1]:,.2f}" for c in components_baseline],
+        textposition='outside'
+    ))
+    
+    fig2.add_trace(go.Bar(
+        name='Scenario',
+        x=[c[0] for c in components_scenario],
+        y=[c[1] for c in components_scenario],
+        marker_color='coral',
+        text=[f"£{c[1]:,.2f}" for c in components_scenario],
+        textposition='outside'
+    ))
+    
+    fig2.update_layout(
+        title='FSI Components: Baseline vs Scenario',
+        yaxis_title='Value (£ billions)',
+        barmode='group',
+        template='plotly_white',
+        height=400,
+        legend=dict(x=0.7, y=0.98)
+    )
+    
+    st.plotly_chart(fig2, use_container_width=True)
+    
+    # Interpretation
+    st.divider()
+    st.subheader("💡 Interpretation")
+    
+    if result['impact'] > 0:
+        impact_text = "🗔 **Increased financial stress**"
+        explanation = f"""The scenario results in a **{abs(result['impact_pct']):.1f}% increase** in the Financial Stress Index, 
+        adding £{abs(result['impact']):.2f} billion in financial burden. This suggests:
+        - Higher consumer electricity costs
+        - Increased risk of payment defaults
+        - Greater affordability challenges for households"""
+    elif result['impact'] < 0:
+        impact_text = "🟢 **Reduced financial stress**"
+        explanation = f"""The scenario results in a **{abs(result['impact_pct']):.1f}% decrease** in the Financial Stress Index, 
+        reducing financial burden by £{abs(result['impact']):.2f} billion. This suggests:
+        - Lower consumer electricity costs
+        - Improved affordability
+        - Reduced risk of arrears and debt"""
+    else:
+        impact_text = "➪ **No change**"
+        explanation = "The scenario parameters result in no net change to the Financial Stress Index."
+    
+    st.markdown(impact_text)
+    st.markdown(explanation)
+    
+    # Formula explanation
+    st.divider()
+    with st.expander("📚 How is FSI Calculated?"):
+        st.markdown("""
+        **Financial Stress Index Formula:**
+        
+        ```
+        FSI = (Electricity Demand × Price per kWh) + Customer Arrears/Debt
+        ```
+        
+        **Components:**
+        - **Demand (MW)**: Quarterly average electricity demand in megawatts
+        - **Price (£/kWh)**: Average variable unit price per kilowatt-hour
+        - **Arrears (£bn)**: Total customer arrears and debt in billions of pounds
+        
+        **What it measures:**
+        FSI combines consumption costs and payment difficulties to identify periods when 
+        consumers face elevated financial stress from electricity expenses.
+        
+        **Data sources:**
+        - Demand: UK National Grid ESO
+        - Prices: BEIS/DESNZ Quarterly Energy Prices
+        - Arrears: Ofgem financial vulnerability data
+        """)
 
 if __name__ == "__main__":
     main()
